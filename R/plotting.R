@@ -1,11 +1,6 @@
 library(tidyverse)
 library(ggrepel)
-
-# - Correlation ---------------------------------------------------------------
-# ENCODE suggests correlation of replicates should have Spearman > 0.9
-correlation <- function(counts) {
-  
-}
+library(wesanderson)
 
 # - Read depth ----------------------------------------------------------------
 # ENCODE suggests read depth > 30M
@@ -154,3 +149,76 @@ heatmap_plot <- function(counts, genes,
   
   return(plt)
 }
+
+
+# - TSNE ----------------------------------------------------------------------
+tsne_plot <- function(counts, info = NULL, color = NULL, shape = NULL,
+                      text = NULL) {
+  df <- counts %>%
+    filter(gene_id %in% expressed_genes(counts)) %>%
+    make_cpm(., log2 = TRUE)
+  
+  # make df with rownames
+  df <- df %>% as.data.frame() %>% column_to_rownames("gene_id")
+  
+  # run PCA
+  pca <- prcomp(t(df), scale. = TRUE)
+  pcs <- choose_pcs(pca, df)
+  
+  # run TSNE from PCA
+  set.seed(32)
+  tsne <- Rtsne::Rtsne(pca$x[, pcs], perplexity = (nrow(pca$x) - 1) / 3)
+  coord <- 
+    as.data.frame(tsne$Y) %>%
+    set_names("TSNE1", "TSNE2") %>%
+    mutate("Sample_ID" = rownames(pca$x))
+  
+  if (!is.null(info)) {
+    coord <- left_join(coord, info, by = "Sample_ID")
+    color_var <- sym(color)
+    shape_var <- sym(shape)
+    text_var <- sym(text)
+  }
+  
+  # plot
+  plt <- ggplot(coord, aes(x = TSNE1, y = TSNE2)) +
+    theme_bw() +
+    theme(panel.grid = element_blank())
+  if (!is.null(info)) {
+    plt <- plt + 
+      geom_point(aes(color = !!color_var, shape = !!shape_var)) +
+      geom_text_repel(aes(label = Sample_ID, color = !!text_var), 
+                      show.legend = FALSE) +
+      scale_color_manual(values = wes_palette("Cavalcanti1"))
+  }
+  return(plt)
+}
+
+
+# - Correlation ---------------------------------------------------------------
+# ENCODE suggests correlation of replicates should have Spearman > 0.9
+correlation_plot <- function(corr, genes = NULL) {
+  # grab data
+  corr <- correlation(counts, genes)
+  
+  # cluster genes and samples
+  sample_clust <- corr %>%
+    spread(key = "Sample_B", value = "corr") %>%
+    as.data.frame() %>%
+    column_to_rownames("Sample_A") %>%
+    dist() %>%
+    hclust()
+  
+  corr <- corr %>% mutate(
+    Sample_A = factor(Sample_A, levels = sample_clust$labels[sample_clust$order]),
+    Sample_B = factor(Sample_B, levels = sample_clust$labels[sample_clust$order])
+    )
+  
+  # plot
+  ggplot(corr, aes(x = Sample_A, y = Sample_B, fill = corr)) +
+    geom_tile() +
+    scale_fill_viridis_c(name = expression(underline("Correlation"))) +
+    theme_minimal()
+}
+
+
