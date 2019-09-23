@@ -197,7 +197,8 @@ tsne_plot <- function(counts, info = NULL, color = NULL, shape = NULL,
 
 # - Correlation ---------------------------------------------------------------
 # ENCODE suggests correlation of replicates should have Spearman > 0.9
-correlation_plot <- function(corr, genes = NULL) {
+correlation_plot <- function(corr, genes = NULL, info = NULL,
+                             annotation = NULL) {
   # grab data
   corr <- correlation(counts, genes)
   
@@ -214,11 +215,59 @@ correlation_plot <- function(corr, genes = NULL) {
     Sample_B = factor(Sample_B, levels = sample_clust$labels[sample_clust$order])
     )
   
+  # add annotation
+  if (!is.null(info)) {
+    anno <- left_join(corr, info, by = c("Sample_A" = "Sample_ID"))
+    anno <- anno %>% mutate(
+      Sample_A = factor(Sample_A, levels = sample_clust$labels[sample_clust$order])
+    )
+  }
+  
   # plot
-  ggplot(corr, aes(x = Sample_A, y = Sample_B, fill = corr)) +
+  plt <- ggplot(corr, aes(x = Sample_A, y = Sample_B, fill = corr)) +
     geom_tile() +
-    scale_fill_viridis_c(name = expression(underline("Correlation"))) +
-    theme_minimal()
+    scale_fill_distiller(palette = "YlGnBu", direction = -1,
+                         name = expression(underline("Correlation"))) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 0, vjust = 1),
+          axis.title = element_blank(),
+          plot.background = element_blank(),
+          panel.background = element_blank())
+  
+  # add annotation (optional)
+  add_annotation_rect <- function(i, j) {
+    annotate("rect", 
+             xmin = which(levels(anno$Sample_A) == samples[j]) - 0.5, 
+             xmax = which(levels(anno$Sample_A) == samples[j]) + 0.5, 
+             ymin = max_yval + i - 0.5, 
+             ymax = max_yval + i + 0.5,
+             fill = colors[anno[anno$Sample_A == samples[j], annotation[i]]]
+    )
+  }
+  add_annotation_text <- function(i) {
+    annotate("text", x = 0, y = max_yval + i, 
+             label = annotation[i], hjust = 1)
+  }
+  if (!is.null(info) & !is.null(annotation)) {
+    max_yval <- length(unique(corr$Sample_B))
+    samples <- unique(corr$Sample_A)
+    palettes <- base::sample(seq(length(wes_palettes)), length(annotation),
+                             replace = FALSE)
+    for (i in 1:length(annotation)) {
+      colors <- wes_palette(palettes[i])
+      classes <- unique(anno[,annotation[i]])
+      colors <- base::sample(colors, length(classes), replace = FALSE)
+      names(colors) <- classes
+      for (j in 1:length(samples)) {
+        plt <- plt + add_annotation_rect(i, j)
+      }
+      plt <- plt + add_annotation_text(i)
+    }
+  } else if (!is.null(annotation) & is.null(info)) {
+    message("Cannot add annotation to a plot without an info object")
+  }
+  
+  return(plt)
 }
 
 
