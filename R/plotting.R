@@ -320,10 +320,9 @@ ma_plot <- function(results, cpm, label = NULL) {
   
   # plot
   p <- ggplot(df, aes(x = expr, y = log2FoldChange, color = padj < 0.05)) +
-    geom_point(alpha = 0.4, stroke = 0) +
+    geom_point(alpha = 0.4, stroke = 0, show.legend = FALSE) +
     scale_x_continuous(trans = "log2", expand = c(0, 0)) +
-    scale_color_manual(values = c("gray50", "firebrick3"),
-                       name = expression(underline("Significant"))) +
+    scale_color_manual(values = c("gray50", "firebrick3")) +
     geom_hline(aes(yintercept = 0)) +
     theme_bw() +
     labs(y = expression("Enrichment (log"[2]*")"),
