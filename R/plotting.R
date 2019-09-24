@@ -66,47 +66,37 @@ counts_heatmap <- function(counts, metadata = NULL, annotation = NULL) {
 
 
 # - Volcano plot --------------------------------------------------------------
-volcano_plot <- function(results, method = "DESeq2", label = NULL) {
-  # set up y-axis scale
-  padj_min <- min(results$padj, na.rm = TRUE)
-  if (-log10(padj_min) < 10) {
-    
-  } else {
-    y_scale <- 10^-(0:as.integer(-log10(padj_min)+1))
-    if (length(y_scale) > 10) {
-      y_scale <- seq(from = -log10(y_scale[1]), 
-                     to = -log10(y_scale[length(y_scale)]), 
-                     length.out = 10)
-    }
-  }
-  # set up x axis scale
-  min_fc <- abs(max(filter(results, padj < 0.05)))
+volcano_plot <- function(results, label = NULL) {
+  # set up axis scales
+  min_padj <- min(results$padj, na.rm = TRUE)
+  max_fc <- max(abs(filter(results, padj < 0.05)$log2FoldChange))
   
-
   # make plot
-  p <- ggplot(results, 
-              aes(x = log2FoldChange, y = -log10(padj), color = padj < 0.05)) +
+  p <- 
+    ggplot(results, 
+           aes(x = log2FoldChange, y = -log10(padj), color = padj < 0.05)) +
     geom_hline(aes(yintercept = -log10(0.05)), linetype = "dashed") +
     geom_vline(aes(xintercept = 0)) +
     geom_vline(aes(xintercept = log2(1.5)), linetype = "dashed") +
     geom_vline(aes(xintercept = -log2(1.5)), linetype = "dashed") +
-    geom_point(show.legend = FALSE, stroke = 0, alpha = ) +
+    geom_point(show.legend = FALSE, stroke = 0, alpha = 0.4) +
     scale_color_manual(values = c("gray", "firebrick3")) +
     theme_bw() +
     theme(panel.grid = element_blank()) +
     labs(x = expression("Fold change (log"[2]*")"), 
-         y = expression(italic("P")*" value")) +
-    scale_x_continuous(limits = c(-min_fc, min_fc)) #+
-    #scale_y_continuous(breaks = y_scale,
-    #                   labels = 10^-y_scale,
-    #                   expand = c(0, 0)) 
+         y = expression(italic("P")*" value (-log"[10]*")")) +
+    scale_x_continuous(limits = c(-max_fc, max_fc)) +
+    scale_y_continuous(expand = c(0, 0), limits = c(0, -log10(min_padj)*1.05))
   
-  if (label) {
+  # add gene labels
+  if (!is.null(label)) {
     df <- left_join(results, genes, by = "gene_id") %>%
+      mutate(gene_name = ifelse(is.na(gene_name), gene_id, gene_name)) %>%
       filter(gene_name %in% label)
-    p <- p + 
-      geom_text_repel(data = df, aes(label = gene_name), color = "black")
+    p <- p + geom_text_repel(data = df, aes(label = gene_name),
+                             show.legend = FALSE, color = "gray10")
   }
+  return(p)
 }
 
 
@@ -237,7 +227,7 @@ tsne_plot <- function(counts, info = NULL, color = NULL, shape = NULL,
 # - Correlation ---------------------------------------------------------------
 # ENCODE suggests correlation of replicates should have Spearman > 0.9
 correlation_plot <- function(counts, genes = NULL, info = NULL,
-                             annotation = NULL) {
+                             annotation = NULL, threshold = NULL) {
   # grab data
   corr <- correlation(counts, genes)
   
@@ -252,18 +242,26 @@ correlation_plot <- function(counts, genes = NULL, info = NULL,
   corr <- corr %>% mutate(
     Sample_A = factor(Sample_A, levels = sample_clust$labels[sample_clust$order]),
     Sample_B = factor(Sample_B, levels = sample_clust$labels[sample_clust$order])
-    )
+  )
   
   # plot
-  plt <- ggplot(corr, aes(x = Sample_A, y = Sample_B, fill = corr)) +
-    geom_tile() +
-    scale_fill_gradient(low = "#273046", high = "#FAD510",
-                         name = expression(underline("Correlation"))) +
+  plt <- ggplot(corr, aes(x = Sample_A, y = Sample_B)) +
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 90, hjust = 0, vjust = 1),
           axis.title = element_blank(),
           plot.background = element_blank(),
           panel.background = element_blank())
+  if (is.null(threshold)) {
+    plt <- plt + geom_tile(aes(fill = corr)) +
+      scale_fill_gradient(low = "#273046", high = "#FAD510",
+                          name = expression(underline("Correlation")))
+  } else {
+    label <- paste("Correlation >", threshold)
+    plt <- plt + geom_tile(aes(fill = corr > threshold)) +
+      scale_fill_manual(values = c("#273046", "#FAD510"),
+                        name = substitute(underline(label))
+      )
+  }
   
   
   # add annotation
@@ -273,7 +271,7 @@ correlation_plot <- function(counts, genes = NULL, info = NULL,
       Sample_A = factor(Sample_A, levels = sample_clust$labels[sample_clust$order])
     )
   }
-
+  
   # add annotation (optional)
   add_annotation_rect <- function(i, j) {
     annotate("rect", 
@@ -311,4 +309,34 @@ correlation_plot <- function(counts, genes = NULL, info = NULL,
   return(plt)
 }
 
-
+# - Expression vs. enrichment plot --------------------------------------------
+ma_plot <- function(results, cpm, label = NULL) {
+  # combine enrichment and expression data
+  cpm <- data.frame("gene_id" = cpm$gene_id, 
+                    "expr" = rowMeans(select(cpm, -gene_id))
+                    )
+  df <- left_join(results, cpm, by = "gene_id") %>%
+    filter(!is.na(padj))
+  
+  # plot
+  p <- ggplot(df, aes(x = expr, y = log2FoldChange, color = padj < 0.05)) +
+    geom_point(alpha = 0.4, stroke = 0) +
+    scale_x_continuous(trans = "log2", expand = c(0, 0)) +
+    scale_color_manual(values = c("gray50", "firebrick3"),
+                       name = expression(underline("Significant"))) +
+    geom_hline(aes(yintercept = 0)) +
+    theme_bw() +
+    labs(y = expression("Enrichment (log"[2]*")"),
+         x = "Expression (FPM)") +
+    theme(panel.grid = element_blank())
+  
+  # label genes
+  if (!is.null(label)) {
+    df <- left_join(df, genes, by = "gene_id") %>% 
+      mutate(gene_name = ifelse(is.na(gene_name), gene_id, gene_name)) %>%
+      filter(gene_name %in% label)
+    p <- p + geom_text_repel(data = df, aes(label = gene_name),
+                             show.legend = FALSE)
+  }
+  return(p)
+}
