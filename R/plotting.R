@@ -112,7 +112,7 @@ volcano_plot <- function(results, method = "DESeq2", label = NULL) {
 
 # - Heatmap plot --------------------------------------------------------------
 heatmap_plot <- function(counts, genes, 
-                         annotation_df = NULL, annotation = NULL) {
+                         info = NULL, annotation = NULL) {
   counts <- make_cpm(counts, log2 = TRUE)
   counts <- filter(counts, gene_id %in% genes)
   
@@ -141,12 +141,48 @@ heatmap_plot <- function(counts, genes,
     xlab(NULL) +
     scale_y_continuous(expand = c(0, 0))
   
-  # add annotation info
-  if (!is.null(annotation_df)) {
-    samples <- annotation_df$Sample_ID
-    anno <- annotation_df[,annotation]
+  # add annotation
+  if (!is.null(info)) {
+    anno <- left_join(df, info, by = "Sample_ID")
+    anno <- anno %>% mutate(
+      Sample_ID = factor(Sample_ID, levels = sample_clust$labels[sample_clust$order])
+    )
   }
   
+  # add annotation (optional)
+  add_annotation_rect <- function(i, j) {
+    annotate("rect", 
+             xmin = which(levels(anno$Sample_ID) == samples[j]) - 0.5, 
+             xmax = which(levels(anno$Sample_ID) == samples[j]) + 0.5, 
+             ymin = max_yval + i - 0.5, 
+             ymax = max_yval + i + 0.5,
+             fill = colors[anno[anno$Sample_ID == samples[j], annotation[i]]]
+    )
+  }
+  add_annotation_text <- function(i) {
+    annotate("text", x = 0, y = max_yval + i, 
+             label = annotation[i], hjust = 1)
+  }
+  if (!is.null(info) & !is.null(annotation)) {
+    max_yval <- length(unique(df$gene_id))
+    samples <- unique(df$Sample_ID)
+    palettes <- base::sample(seq(length(wes_palettes)), length(annotation),
+                             replace = FALSE)
+    for (i in 1:length(annotation)) {
+      colors <- wes_palette(palettes[i])
+      classes <- unique(anno[, annotation[i]])
+      colors <- base::sample(colors, length(classes), replace = FALSE)
+      names(colors) <- classes
+      for (j in 1:length(samples)) {
+        plt <- plt + add_annotation_rect(i, j)
+      }
+      plt <- plt + add_annotation_text(i)
+    }
+  } else if (!is.null(annotation) & is.null(info)) {
+    message("Cannot add annotation to a plot without an info object")
+  }
+  
+  # return plot
   return(plt)
 }
 
@@ -197,7 +233,7 @@ tsne_plot <- function(counts, info = NULL, color = NULL, shape = NULL,
 
 # - Correlation ---------------------------------------------------------------
 # ENCODE suggests correlation of replicates should have Spearman > 0.9
-correlation_plot <- function(corr, genes = NULL, info = NULL,
+correlation_plot <- function(counts, genes = NULL, info = NULL,
                              annotation = NULL) {
   # grab data
   corr <- correlation(counts, genes)
@@ -215,18 +251,10 @@ correlation_plot <- function(corr, genes = NULL, info = NULL,
     Sample_B = factor(Sample_B, levels = sample_clust$labels[sample_clust$order])
     )
   
-  # add annotation
-  if (!is.null(info)) {
-    anno <- left_join(corr, info, by = c("Sample_A" = "Sample_ID"))
-    anno <- anno %>% mutate(
-      Sample_A = factor(Sample_A, levels = sample_clust$labels[sample_clust$order])
-    )
-  }
-  
   # plot
   plt <- ggplot(corr, aes(x = Sample_A, y = Sample_B, fill = corr)) +
     geom_tile() +
-    scale_fill_distiller(palette = "YlGnBu", direction = -1,
+    scale_fill_gradient(low = "#273046", high = "#FAD510",
                          name = expression(underline("Correlation"))) +
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 90, hjust = 0, vjust = 1),
@@ -234,6 +262,15 @@ correlation_plot <- function(corr, genes = NULL, info = NULL,
           plot.background = element_blank(),
           panel.background = element_blank())
   
+  
+  # add annotation
+  if (!is.null(info)) {
+    anno <- left_join(corr, info, by = c("Sample_A" = "Sample_ID"))
+    anno <- anno %>% mutate(
+      Sample_A = factor(Sample_A, levels = sample_clust$labels[sample_clust$order])
+    )
+  }
+
   # add annotation (optional)
   add_annotation_rect <- function(i, j) {
     annotate("rect", 
@@ -245,8 +282,9 @@ correlation_plot <- function(corr, genes = NULL, info = NULL,
     )
   }
   add_annotation_text <- function(i) {
-    annotate("text", x = 0, y = max_yval + i, 
-             label = annotation[i], hjust = 1)
+    annotate("label", x = length(samples)/2 + 0.5, y = max_yval + i, 
+             label = annotation[i], hjust = 0.5, color = "gray90", 
+             fill = "gray10", alpha = 0.5, label.size = NA)
   }
   if (!is.null(info) & !is.null(annotation)) {
     max_yval <- length(unique(corr$Sample_B))
