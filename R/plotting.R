@@ -10,11 +10,12 @@ read_depth <- function(counts) {
 }
 
 # - Plot count data -----------------------------------------------------------
-counts_plot <- function(counts, gene_ids, metadata, group = NULL,
-                        color = NULL, shape = NULL, dodge = NULL,
+counts_plot <- function(counts, gene_names, info, samples = NULL,
+                        group = NULL, color = NULL, shape = NULL, dodge = NULL,
                         pair = FALSE, cpm = TRUE) {
-  # set up data.frame with counts and metadata
-  metadata <- select(metadata, Sample_ID, pair, cells, quo(color), quo(shape))
+  if (!is.null(samples)) {
+    counts <- select(counts, gene_id, samples)
+  }
   
   # make CPM
   if (cpm) {
@@ -25,22 +26,27 @@ counts_plot <- function(counts, gene_ids, metadata, group = NULL,
   
   # add metadata
   df <- df %>%
-    filter(gene_id %in% gene_ids) %>%
-    gather(key = "Sample_ID", value = "expr") %>%
-    left_join(., metadata, by = "Sample_ID") %>%
-    left_join(., genes, by = )
+    left_join(., genes, by = "gene_id") %>%
+    filter(gene_name %in% gene_names) %>%
+    select(gene_name, starts_with("Sample")) %>%
+    gather(-gene_name, key = "Sample_ID", value = "expr") %>%
+    left_join(., info, by = "Sample_ID")
   
   # plot
-  p <- ggplot(df, aes(x = !!dodge, y = expr, group = !!group)) +
-    geom_line() +
-    geom_point() +
+  p <- ggplot(df, aes(y = expr)) +
     scale_y_continuous(trans = "log2") +
-    theme_classic() +
-    ylab("Expression (CPM)")
-  if (pair) {
-    
-  }
+    theme_minimal() +
+    ylab("Expression (CPM)") +
+    xlab(NULL)
+  
   # custom color aesthetic
+  if (!is.null(dodge)) {
+    p <- p + geom_boxplot(aes(x = !!sym(dodge))) +
+      geom_jitter(aes(x = !!sym(dodge)), height = 0, width = 0.2)
+  } else {
+    p <- p + geom_boxplot(aes(x = '')) +
+      geom_jitter(aes(x = ''), height = 0, width = 0.2)
+  }
   if (!is.null(color)) {
     p <- p + 
       geom_line(aes(color = !!color)) + 
@@ -53,15 +59,10 @@ counts_plot <- function(counts, gene_ids, metadata, group = NULL,
       geom_point(aes(shape = shape))
   }
   # facet for multiple genes
-  if (length(gene_ids) > 1) {
-    p <- p + facet_wrap(~gene_ids)
+  if (length(gene_names) > 1) {
+    p <- p + facet_wrap(~gene_name)
   }
   return(p)
-}
-
-# - Counts heatmap ------------------------------------------------------------
-counts_heatmap <- function(counts, metadata = NULL, annotation = NULL) {
-  
 }
 
 
@@ -94,7 +95,7 @@ volcano_plot <- function(results, label = NULL) {
       mutate(gene_name = ifelse(is.na(gene_name), gene_id, gene_name)) %>%
       filter(gene_name %in% label)
     p <- p + geom_text_repel(data = df, aes(label = gene_name),
-                             show.legend = FALSE, color = "gray10")
+                             show.legend = FALSE)
   }
   return(p)
 }
@@ -320,12 +321,14 @@ ma_plot <- function(results, cpm, label = NULL) {
   
   # plot
   p <- ggplot(df, aes(x = expr, y = log2FoldChange, color = padj < 0.05)) +
+    geom_hline(aes(yintercept = -log2(1.5)), linetype = "dashed") +
+    geom_hline(aes(yintercept = log2(1.5)), linetype = "dashed") +
     geom_point(alpha = 0.4, stroke = 0, show.legend = FALSE) +
     scale_x_continuous(trans = "log2", expand = c(0, 0)) +
     scale_color_manual(values = c("gray50", "firebrick3")) +
     geom_hline(aes(yintercept = 0)) +
     theme_bw() +
-    labs(y = expression("Enrichment (log"[2]*")"),
+    labs(y = expression("Fold change (log"[2]*")"),
          x = "Expression (FPM)") +
     theme(panel.grid = element_blank())
   
