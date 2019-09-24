@@ -131,8 +131,8 @@ heatmap_plot <- function(counts, genes,
   # plot
   plt <- ggplot(df, aes(x = Sample_ID, y = as.numeric(gene_id), fill = counts)) +
     geom_tile() +
-    scale_fill_distiller(palette = "YlGnBu", direction = -1,
-                         name = expression(underline("log"[2]*"CPM"))) +
+    scale_fill_gradient(low = "#273046", high = "#FAD510",
+                        name = expression(underline("log"[2]*"CPM"))) +
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5,
                                      color = "black"),
@@ -146,7 +146,7 @@ heatmap_plot <- function(counts, genes,
     anno <- left_join(df, info, by = "Sample_ID")
     anno <- anno %>% mutate(
       Sample_ID = factor(Sample_ID, levels = sample_clust$labels[sample_clust$order])
-    )
+    ) %>% as.data.frame()
   }
   
   # add annotation (optional)
@@ -154,19 +154,22 @@ heatmap_plot <- function(counts, genes,
     annotate("rect", 
              xmin = which(levels(anno$Sample_ID) == samples[j]) - 0.5, 
              xmax = which(levels(anno$Sample_ID) == samples[j]) + 0.5, 
-             ymin = max_yval + i - 0.5, 
-             ymax = max_yval + i + 0.5,
+             ymin = max_yval + block_size * (i - 0.5), 
+             ymax = max_yval + block_size * (i + 0.5),
              fill = colors[anno[anno$Sample_ID == samples[j], annotation[i]]]
     )
   }
   add_annotation_text <- function(i) {
-    annotate("text", x = 0, y = max_yval + i, 
-             label = annotation[i], hjust = 1)
+    annotate("label", x = length(samples)/2 + 0.5, 
+             y = max_yval + block_size * i, 
+             label = annotation[i], hjust = 0.5, color = "gray90", 
+             fill = "gray10", alpha = 0.5, label.size = NA)
   }
   if (!is.null(info) & !is.null(annotation)) {
     max_yval <- length(unique(df$gene_id))
+    block_size <- max_yval * 0.05
     samples <- unique(df$Sample_ID)
-    palettes <- base::sample(seq(length(wes_palettes)), length(annotation),
+    palettes <- base::sample(1:length(wes_palettes), length(annotation),
                              replace = FALSE)
     for (i in 1:length(annotation)) {
       colors <- wes_palette(palettes[i])
