@@ -154,19 +154,19 @@ heatmap_plot <- function(counts, genes,
     annotate("rect", 
              xmin = which(levels(anno$Sample_ID) == samples[j]) - 0.5, 
              xmax = which(levels(anno$Sample_ID) == samples[j]) + 0.5, 
-             ymin = max_yval + block_size * (i - 0.5), 
-             ymax = max_yval + block_size * (i + 0.5),
+             ymin = max_yval + block_size * (i - 1), 
+             ymax = max_yval + block_size * i,
              fill = colors[anno[anno$Sample_ID == samples[j], annotation[i]]]
     )
   }
   add_annotation_text <- function(i) {
     annotate("label", x = length(samples)/2 + 0.5, 
-             y = max_yval + block_size * i, 
+             y = max_yval + block_size * (i - 0.5), 
              label = annotation[i], hjust = 0.5, color = "gray90", 
              fill = "gray10", alpha = 0.5, label.size = NA)
   }
   if (!is.null(info) & !is.null(annotation)) {
-    max_yval <- length(unique(df$gene_id))
+    max_yval <- length(levels(df$gene_id))
     block_size <- max_yval * 0.05
     samples <- unique(df$Sample_ID)
     palettes <- base::sample(1:length(wes_palettes), length(annotation),
