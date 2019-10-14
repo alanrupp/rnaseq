@@ -103,7 +103,8 @@ volcano_plot <- function(results, label = NULL) {
 
 # - Heatmap plot --------------------------------------------------------------
 heatmap_plot <- function(counts, genes, 
-                         info = NULL, annotation = NULL) {
+                         info = NULL, annotation = NULL,
+                         max_cpm = NULL) {
   counts <- make_cpm(counts, log2 = TRUE)
   counts <- filter(counts, gene_id %in% genes)
   
@@ -119,10 +120,14 @@ heatmap_plot <- function(counts, genes,
            Sample_ID = factor(Sample_ID,
                               levels = sample_clust$labels[sample_clust$order]))
   
+  if (!is.null(max_cpm)) {
+    df <- mutate(df, counts = ifelse(counts > max_cpm, max_cpm, counts))
+  }
+  
   # plot
   plt <- ggplot(df, aes(x = Sample_ID, y = as.numeric(gene_id), fill = counts)) +
     geom_tile() +
-    scale_fill_gradient(low = "#273046", high = "#FAD510",
+    scale_fill_gradient(low = "#074050", high = "#d3f2a3",
                         name = expression(underline("log"[2]*"CPM"))) +
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5,
@@ -254,7 +259,7 @@ correlation_plot <- function(counts, genes = NULL, info = NULL,
           panel.background = element_blank())
   if (is.null(threshold)) {
     plt <- plt + geom_tile(aes(fill = corr)) +
-      scale_fill_gradient2(low = "#008080", mid = "#f6edbd", high = "#ca562c",
+      scale_fill_gradient2(low = "#ca562c", mid = "#f6edbd", high = "#008080",
                            midpoint = 0.9,
                            name = expression(underline("Correlation")))
   } else {
