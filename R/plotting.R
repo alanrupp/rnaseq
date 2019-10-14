@@ -25,8 +25,7 @@ counts_plot <- function(counts, gene_names, info, samples = NULL,
   }
   
   # add metadata
-  df <- df %>%
-    left_join(., genes, by = "gene_id") %>%
+  df <- left_join(df, genes, by = "gene_id") %>%
     filter(gene_name %in% gene_names) %>%
     select(gene_name, starts_with("Sample")) %>%
     gather(-gene_name, key = "Sample_ID", value = "expr") %>%
@@ -60,7 +59,7 @@ counts_plot <- function(counts, gene_names, info, samples = NULL,
   }
   # facet for multiple genes
   if (length(gene_names) > 1) {
-    p <- p + facet_wrap(~gene_name, ncol = n_col)
+    p <- p + facet_wrap(~gene_name, ncol = n_col, scales = "free_y")
   }
   return(p)
 }
@@ -70,7 +69,7 @@ counts_plot <- function(counts, gene_names, info, samples = NULL,
 volcano_plot <- function(results, label = NULL) {
   # set up axis scales
   min_padj <- min(results$padj, na.rm = TRUE)
-  max_fc <- max(abs(filter(results, padj < 0.05)$log2FoldChange))
+  max_fc <- max(abs(filter(results, padj < 0.05)$log2FoldChange), na.rm = TRUE)
   
   # make plot
   p <- 
@@ -86,8 +85,9 @@ volcano_plot <- function(results, label = NULL) {
     theme(panel.grid = element_blank()) +
     labs(x = expression("Fold change (log"[2]*")"), 
          y = expression(italic("P")*" value (-log"[10]*")")) +
-    scale_x_continuous(limits = c(-max_fc, max_fc)) +
-    scale_y_continuous(expand = c(0, 0), limits = c(0, -log10(min_padj)*1.05))
+    scale_x_continuous(limits = c(-max_fc, max_fc),
+                       expand = c(0, 0)) +
+    scale_y_continuous(expand = c(0, 0))
   
   # add gene labels
   if (!is.null(label)) {
@@ -100,6 +100,22 @@ volcano_plot <- function(results, label = NULL) {
   return(p)
 }
 
+# - Spectral color palette ----------------------------------------------------
+# from colorlover python package
+make_spectral <- function(n = 100) {
+  colors <- c(rgb(158/255, 1/255, 66/255, 1), 
+              rgb(213/255, 62/255, 79/255, 1),
+              rgb(244/255, 109/255, 67/255, 1), 
+              rgb(253/255, 174/255, 97/255, 1), 
+              rgb(254/255, 224/255, 139/255, 1),
+              rgb(255/255, 255/255, 191/255, 1), 
+              rgb(230/255, 245/255, 152/255, 1), 
+              rgb(171/255, 221/255, 164/255, 1), 
+              rgb(102/255, 194/255, 165/255, 1), 
+              rgb(50/255, 136/255, 189/255, 1), 
+              rgb(94/255, 79/255, 162/255, 1))
+  colorRampPalette(colors)(n)
+} 
 
 # - Heatmap plot --------------------------------------------------------------
 heatmap_plot <- function(counts, genes, 
@@ -127,8 +143,8 @@ heatmap_plot <- function(counts, genes,
   # plot
   plt <- ggplot(df, aes(x = Sample_ID, y = as.numeric(gene_id), fill = counts)) +
     geom_tile() +
-    scale_fill_gradient(low = "#074050", high = "#d3f2a3",
-                        name = expression(underline("log"[2]*"CPM"))) +
+    scale_fill_gradientn(colors = make_spectral(),
+                         name = expression(underline("log"[2]*"CPM"))) +
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5,
                                      color = "black"),
