@@ -12,7 +12,7 @@ read_depth <- function(counts) {
 # - Plot count data -----------------------------------------------------------
 counts_plot <- function(counts, gene_names, info, samples = NULL,
                         group = NULL, color = NULL, shape = NULL, dodge = NULL,
-                        pair = FALSE, cpm = TRUE) {
+                        pair = FALSE, cpm = TRUE, n_col = NULL) {
   if (!is.null(samples)) {
     counts <- select(counts, gene_id, samples)
   }
@@ -60,7 +60,7 @@ counts_plot <- function(counts, gene_names, info, samples = NULL,
   }
   # facet for multiple genes
   if (length(gene_names) > 1) {
-    p <- p + facet_wrap(~gene_name)
+    p <- p + facet_wrap(~gene_name, ncol = n_col)
   }
   return(p)
 }
@@ -254,8 +254,9 @@ correlation_plot <- function(counts, genes = NULL, info = NULL,
           panel.background = element_blank())
   if (is.null(threshold)) {
     plt <- plt + geom_tile(aes(fill = corr)) +
-      scale_fill_gradient(low = "#273046", high = "#FAD510",
-                          name = expression(underline("Correlation")))
+      scale_fill_gradient2(low = "#008080", mid = "#f6edbd", high = "#ca562c",
+                           midpoint = 0.9,
+                           name = expression(underline("Correlation")))
   } else {
     label <- paste("Correlation >", threshold)
     plt <- plt + geom_tile(aes(fill = corr > threshold)) +
@@ -263,7 +264,6 @@ correlation_plot <- function(counts, genes = NULL, info = NULL,
                         name = substitute(underline(label))
       )
   }
-  
   
   # add annotation
   if (!is.null(info)) {
