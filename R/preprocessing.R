@@ -50,6 +50,7 @@ correlation <- function(counts, genes = NULL) {
   if (!is.null(genes)) {
     counts <- filter(counts, gene_id %in% genes) 
   }
+  counts <- make_cpm(counts, log2 = TRUE)
   corr <- cor(select(counts, -gene_id))
   corr <- as.data.frame(corr) %>%
     rownames_to_column("Sample_A") %>%
