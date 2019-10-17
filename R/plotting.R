@@ -69,7 +69,12 @@ counts_plot <- function(counts, gene_names, info, samples = NULL,
 volcano_plot <- function(results, label = NULL) {
   # set up axis scales
   min_padj <- min(results$padj, na.rm = TRUE)
-  max_fc <- max(abs(filter(results, padj < 0.05)$log2FoldChange), na.rm = TRUE)
+  if (sum(results$padj < 0.05, na.rm = TRUE) > 0) {
+    max_fc <- max(abs(filter(results, padj < 0.05)$log2FoldChange), 
+                  na.rm = TRUE)
+  } else {
+    max_fc <- max(abs(results$log2FoldChange), na.rm = TRUE)
+  }
   
   # make plot
   p <- 
@@ -118,11 +123,11 @@ make_spectral <- function(n = 100) {
 } 
 
 # - Heatmap plot --------------------------------------------------------------
-heatmap_plot <- function(counts, genes, 
+heatmap_plot <- function(counts, genes = NULL, 
                          info = NULL, annotation = NULL,
-                         max_cpm = NULL) {
-  counts <- make_cpm(counts, log2 = TRUE)
-  counts <- filter(counts, gene_id %in% genes)
+                         max_cpm = TRUE, make_cpm = TRUE) {
+  if (make_cpm) { counts <- make_cpm(counts, log2 = TRUE) }
+  if (!is.null(genes)) { counts <- filter(counts, gene_id %in% genes) }
   
   # cluster genes and samples
   gene_clust <- counts %>% as.data.frame() %>%
