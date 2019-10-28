@@ -125,7 +125,7 @@ make_spectral <- function(n = 100) {
 # - Heatmap plot --------------------------------------------------------------
 heatmap_plot <- function(counts, genes = NULL, 
                          info = NULL, annotation = NULL,
-                         max_cpm = TRUE, make_cpm = TRUE) {
+                         max_cpm = 10, make_cpm = TRUE) {
   if (make_cpm) { counts <- make_cpm(counts, log2 = TRUE) }
   if (!is.null(genes)) { counts <- filter(counts, gene_id %in% genes) }
   
@@ -141,9 +141,8 @@ heatmap_plot <- function(counts, genes = NULL,
            Sample_ID = factor(Sample_ID,
                               levels = sample_clust$labels[sample_clust$order]))
   
-  if (!is.null(max_cpm)) {
-    df <- mutate(df, counts = ifelse(counts > max_cpm, max_cpm, counts))
-  }
+  # clip max at given max value
+  df <- mutate(df, counts = ifelse(counts > max_cpm, max_cpm, counts))
   
   # plot
   plt <- ggplot(df, aes(x = Sample_ID, y = as.numeric(gene_id), fill = counts)) +
@@ -162,8 +161,9 @@ heatmap_plot <- function(counts, genes = NULL,
   if (!is.null(info)) {
     anno <- left_join(df, info, by = "Sample_ID")
     anno <- anno %>% mutate(
-      Sample_ID = factor(Sample_ID, levels = sample_clust$labels[sample_clust$order])
-    ) %>% as.data.frame()
+      Sample_ID = factor(Sample_ID, 
+                         levels = sample_clust$labels[sample_clust$order])
+      ) %>% as.data.frame()
   }
   
   # add annotation (optional)
@@ -186,12 +186,13 @@ heatmap_plot <- function(counts, genes = NULL,
     max_yval <- length(levels(df$gene_id))
     block_size <- max_yval * 0.05
     samples <- unique(df$Sample_ID)
-    palettes <- base::sample(1:length(wes_palettes), length(annotation),
-                             replace = FALSE)
+    brewer_palettes <- c("Accent", "Dark2", "Paired", "Pastel1", "Pastel2",
+                         "Set1", "Set2", "Set3")
+    palettes <- base::sample(brewer_palettes, length(annotation))
     for (i in 1:length(annotation)) {
-      colors <- wes_palette(palettes[i])
       classes <- unique(anno[, annotation[i]])
-      colors <- base::sample(colors, length(classes), replace = FALSE)
+      colors <- RColorBrewer::brewer.pal(n = length(classes), 
+                                         name = palettes[i])
       names(colors) <- classes
       for (j in 1:length(samples)) {
         plt <- plt + add_annotation_rect(i, j)
