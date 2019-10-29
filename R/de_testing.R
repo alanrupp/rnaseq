@@ -29,11 +29,28 @@ intermine <- function(genes) {
   return(result)
 }
 
-unique_groups <- unique(info$Treatment)
-map(unique_groups,
-    ~ apply(., 2, function(x) 
-      mean(log2(cpm[, filter(bead_info, Treatment == x)$Sample_ID] + 1)))
+# - GO analysis ---------------------------------------------------------------
+run_go <- function(deseq_results, go) {
+  deseq_results <- filter(deseq_results, !is.na(padj))
+  deseq_results <- filter(deseq_results, gene_name %in% unique(go$gene))
+  go <- filter(go, gene %in% deseq_results$gene_name)
+  
+  # set up population values for hypergeometric test
+  sig_genes <- sum(deseq_results$padj < 0.05)
+  all_genes <- nrow(deseq_results)
+  go_test <- function(go_term) {
+    all_go_genes <- sum(go$GO == go_term)
+    sig_go_genes <- sum(
+      go$GO == go_term & 
+        go$gene %in% filter(deseq_results, padj < 0.05)$gene_name
     )
-
-
-apply(cpm[, filter(bead_info, Treatment == "PBS")$Sample_ID], 1, mean)
+    phyper(sig_go_genes, sig_genes, all_genes - sig_genes, all_go_genes)
+  }
+  
+  # run hypergeometric test on all GO terms and adjust with Bonferroni
+  go_terms <- unique(go$GO)
+  results <- map_dbl(go_terms, go_test)
+  results <- p.adjust(results, method = "bonferroni")
+  names(results) <- go_terms
+  return(results)
+}
