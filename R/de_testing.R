@@ -30,7 +30,13 @@ intermine <- function(genes) {
 }
 
 # - GO analysis ---------------------------------------------------------------
-run_go <- function(deseq_results, go) {
+run_go <- function(deseq_results, ontology = NULL) {
+  go <- read_csv("~/Programs/rnaseq/data/mgi.csv.gz")
+  terms <- read_tsv("~/Programs/rnaseq/data/go_terms.mgi", col_names = FALSE)
+  if (!is.null(ontology)) {
+    terms <- filter(terms, X1 == ontology)
+    go <- filter(go, GO %in% terms$X2)
+  }
   deseq_results <- filter(deseq_results, !is.na(padj))
   deseq_results <- filter(deseq_results, gene_name %in% unique(go$gene))
   go <- filter(go, gene %in% deseq_results$gene_name)
@@ -44,13 +50,18 @@ run_go <- function(deseq_results, go) {
       go$GO == go_term & 
         go$gene %in% filter(deseq_results, padj < 0.05)$gene_name
     )
-    phyper(sig_go_genes, sig_genes, all_genes - sig_genes, all_go_genes)
+    phyper(sig_go_genes-1, sig_genes, all_genes-sig_genes, all_go_genes,
+           lower.tail = FALSE)
   }
   
   # run hypergeometric test on all GO terms and adjust with Bonferroni
   go_terms <- unique(go$GO)
   results <- map_dbl(go_terms, go_test)
-  results <- p.adjust(results, method = "bonferroni")
-  names(results) <- go_terms
-  return(results)
+  results <- p.adjust(results, method = "BH")
+  
+  # export as data.frame
+  results <- data.frame("GO" = go_terms, "P" = results)
+  results <- left_join(results, terms, by = c("GO" = "X2"))
+  results <- rename(results, "Ontology" = X1, "Name" = X3)
+  return(select(results, GO, Name, Ontology, P))
 }
