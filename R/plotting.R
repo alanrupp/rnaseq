@@ -125,22 +125,39 @@ make_spectral <- function(n = 100) {
 # - Heatmap plot --------------------------------------------------------------
 heatmap_plot <- function(counts, genes = NULL, 
                          info = NULL, annotation = NULL,
-                         max_cpm = 10, make_cpm = TRUE) {
+                         max_cpm = 10, make_cpm = TRUE,
+                         label_genes = FALSE,
+                         cluster_genes = TRUE, cluster_samples = TRUE) {
   if (make_cpm) { counts <- make_cpm(counts, log2 = TRUE) }
-  if (!is.null(genes)) { counts <- filter(counts, gene_id %in% genes) }
-  
-  # cluster genes and samples
-  gene_clust <- counts %>% as.data.frame() %>%
-    column_to_rownames("gene_id") %>% dist() %>% hclust()
-  sample_clust <- hclust(dist(t(counts[,2:ncol(counts)])))
+  if (!is.null(genes)) { 
+    counts <- filter(counts, gene_id %in% genes) 
+  } else {
+    genes <- unique(counts$gene_id)
+  }
   
   # make tidy
-  df <- gather(counts, -gene_id, key = "Sample_ID", value = "counts") %>%
-    mutate(gene_id = factor(gene_id, 
-                            levels = gene_clust$labels[gene_clust$order]),
-           Sample_ID = factor(Sample_ID,
-                              levels = sample_clust$labels[sample_clust$order]))
+  df <- gather(counts, -gene_id, key = "Sample_ID", value = "counts")
   
+  # cluster genes and samples
+  if (cluster_genes) {
+    gene_clust <- counts %>% as.data.frame() %>%
+      column_to_rownames("gene_id") %>% dist() %>% hclust()
+    gene_levels <- gene_clust$labels[gene_clust$order]
+  } else {
+    gene_levels <- genes
+  }
+  if (cluster_samples) {
+    sample_clust <- hclust(dist(t(counts[, 2:ncol(counts)])))
+    sample_levels <- sample_clust$labels[sample_clust$order]
+  } else {
+    sample_levels <- colnames(counts)[colnames(counts) != "gene_id"]
+  }
+  
+  # make factor
+  df <- df %>%
+    mutate(gene_id = factor(gene_id, levels = gene_levels),
+           Sample_ID = factor(Sample_ID, levels = sample_levels))
+    
   # clip max at given max value
   df <- mutate(df, counts = ifelse(counts > max_cpm, max_cpm, counts))
   
@@ -156,13 +173,15 @@ heatmap_plot <- function(counts, genes = NULL,
     ylab(NULL) +
     xlab(NULL) +
     scale_y_continuous(expand = c(0, 0))
+  if (label_genes) {
+    plt <- plt + theme(axis.text.y = element_text(color = "black"))
+  }
   
   # add annotation
   if (!is.null(info)) {
     anno <- left_join(df, info, by = "Sample_ID")
     anno <- anno %>% mutate(
-      Sample_ID = factor(Sample_ID, 
-                         levels = sample_clust$labels[sample_clust$order])
+      Sample_ID = factor(Sample_ID, levels = sample_levels)
       ) %>% as.data.frame()
   }
   
@@ -318,12 +337,13 @@ correlation_plot <- function(counts, genes = NULL, info = NULL,
   if (!is.null(info) & !is.null(annotation)) {
     max_yval <- length(unique(corr$Sample_B))
     samples <- unique(corr$Sample_A)
-    palettes <- base::sample(seq(length(wes_palettes)), length(annotation),
-                             replace = FALSE)
+    brewer_palettes <- c("Accent", "Dark2", "Paired", "Pastel1", "Pastel2",
+                        "Set1", "Set2", "Set3")
+    palettes <- base::sample(brewer_palettes, length(annotation))
     for (i in 1:length(annotation)) {
-      colors <- wes_palette(palettes[i])
       classes <- unique(anno[,annotation[i]])
-      colors <- base::sample(colors, length(classes), replace = FALSE)
+      colors <- RColorBrewer::brewer.pal(n = length(classes), 
+                                         name = palettes[i])
       names(colors) <- classes
       for (j in 1:length(samples)) {
         plt <- plt + add_annotation_rect(i, j)
