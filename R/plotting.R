@@ -1,6 +1,7 @@
 library(tidyverse)
 library(ggrepel)
 library(wesanderson)
+library(ggdendro)
 
 # - Read depth ----------------------------------------------------------------
 # ENCODE suggests read depth > 30M
@@ -127,7 +128,8 @@ heatmap_plot <- function(counts, genes = NULL,
                          info = NULL, annotation = NULL,
                          max_cpm = 10, make_cpm = TRUE,
                          label_genes = FALSE,
-                         cluster_genes = TRUE, cluster_samples = TRUE) {
+                         cluster_genes = TRUE, cluster_samples = TRUE,
+                         draw_tree = FALSE) {
   if (make_cpm) { counts <- make_cpm(counts, log2 = TRUE) }
   if (!is.null(genes)) { 
     counts <- filter(counts, gene_id %in% genes) 
@@ -223,7 +225,18 @@ heatmap_plot <- function(counts, genes = NULL,
   }
   
   # return plot
-  return(plt)
+  if (draw_tree) {
+    n_samples <- length(sample_clust$labels)
+    tree_plot <- ggdendrogram(dendro_data(sample_clust)) + 
+      theme_void() +
+      theme(plot.margin = unit(c(0, 1.1-(0.008*n_samples), 
+                                 0, 0.2-(0.008*n_samples)), "in"))
+    return(cowplot::plot_grid(plotlist = list(tree_plot, plt), ncol = 1,
+                              rel_heights = c(0.2, 0.8))
+    )
+  } else {
+    return(plt)
+  }
 }
 
 
