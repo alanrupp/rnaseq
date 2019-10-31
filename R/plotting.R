@@ -129,7 +129,8 @@ heatmap_plot <- function(counts, genes = NULL,
                          max_cpm = 10, make_cpm = TRUE,
                          label_genes = FALSE,
                          cluster_genes = TRUE, cluster_samples = TRUE,
-                         draw_tree = FALSE) {
+                         draw_tree = FALSE,
+                         color_palette = NULL) {
   if (make_cpm) { counts <- make_cpm(counts, log2 = TRUE) }
   if (!is.null(genes)) { 
     counts <- filter(counts, gene_id %in% genes) 
@@ -166,8 +167,6 @@ heatmap_plot <- function(counts, genes = NULL,
   # plot
   plt <- ggplot(df, aes(x = Sample_ID, y = as.numeric(gene_id), fill = counts)) +
     geom_tile() +
-    scale_fill_gradientn(colors = make_spectral(),
-                         name = expression(underline("log"[2]*"CPM"))) +
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5,
                                      color = "black"),
@@ -177,6 +176,10 @@ heatmap_plot <- function(counts, genes = NULL,
     scale_y_continuous(expand = c(0, 0))
   if (label_genes) {
     plt <- plt + theme(axis.text.y = element_text(color = "black"))
+  }
+  if (!is.null(color_palette)) {
+    plt <- plt + scale_fill_gradient2(color_palette) +
+      theme(legend.title = element_blank())
   }
   
   # add annotation
@@ -287,22 +290,26 @@ tsne_plot <- function(counts, info = NULL, color = NULL, shape = NULL,
 # - Correlation ---------------------------------------------------------------
 # ENCODE suggests correlation of replicates should have Spearman > 0.9
 correlation_plot <- function(counts, genes = NULL, info = NULL,
-                             annotation = NULL, threshold = NULL) {
+                             annotation = NULL, threshold = NULL,
+                             cluster_samples = TRUE,
+                             draw_tree = FALSE) {
   # grab data
   corr <- correlation(counts, genes)
   
   # cluster genes and samples
-  sample_clust <- corr %>%
-    spread(key = "Sample_B", value = "corr") %>%
-    as.data.frame() %>%
-    column_to_rownames("Sample_A") %>%
-    dist() %>%
-    hclust()
-  
-  corr <- corr %>% mutate(
-    Sample_A = factor(Sample_A, levels = sample_clust$labels[sample_clust$order]),
-    Sample_B = factor(Sample_B, levels = sample_clust$labels[sample_clust$order])
-  )
+  if (cluster_samples) {
+    sample_clust <- corr %>%
+      spread(key = "Sample_B", value = "corr") %>%
+      as.data.frame() %>%
+      column_to_rownames("Sample_A") %>%
+      dist() %>%
+      hclust()
+    corr <- corr %>% mutate(
+      Sample_A = factor(Sample_A, levels = sample_clust$labels[sample_clust$order]),
+      Sample_B = factor(Sample_B, levels = sample_clust$labels[sample_clust$order])
+    )
+    
+  }
   
   # plot
   plt <- ggplot(corr, aes(x = Sample_A, y = Sample_B)) +
@@ -367,7 +374,19 @@ correlation_plot <- function(counts, genes = NULL, info = NULL,
     message("Cannot add annotation to a plot without an info object")
   }
   
-  return(plt)
+  # return plot
+  if (draw_tree) {
+    n_samples <- length(sample_clust$labels)
+    tree_plot <- ggdendrogram(dendro_data(sample_clust)) + 
+      theme_void() +
+      theme(plot.margin = unit(c(0, 1.1-(0.008*n_samples), 
+                                 0, 0.2-(0.008*n_samples)), "in"))
+    return(cowplot::plot_grid(plotlist = list(tree_plot, plt), ncol = 1,
+                              rel_heights = c(0.2, 0.8))
+    )
+  } else {
+    return(plt)
+  }
 }
 
 # - Expression vs. enrichment plot --------------------------------------------
