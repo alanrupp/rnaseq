@@ -67,15 +67,24 @@ counts_plot <- function(counts, gene_names, info, samples = NULL,
 
 
 # - Volcano plot --------------------------------------------------------------
-volcano_plot <- function(results, label = NULL) {
+volcano_plot <- function(results, label = NULL, xmax = NULL, ymax = NULL) {
   # set up axis scales
-  min_padj <- min(results$padj, na.rm = TRUE)
-  if (sum(results$padj < 0.05, na.rm = TRUE) > 0) {
-    max_fc <- max(abs(filter(results, padj < 0.05)$log2FoldChange), 
+  if (is.null(xmax)) {
+    if (sum(results$padj < 0.05, na.rm = TRUE) > 0) {
+      xmax <- max(abs(filter(results, padj < 0.05)$log2FoldChange), 
                   na.rm = TRUE)
-  } else {
-    max_fc <- max(abs(results$log2FoldChange), na.rm = TRUE)
-  }
+    } else {
+      xmax <- max(abs(results$log2FoldChange), na.rm = TRUE)
+    }
+  } 
+  if (is.null(ymax)) {
+    pvals <- -log10(results$padj)
+    pvals <- pvals[is.finite(pvals)]
+    ymax <- max(pvals)
+  } 
+  
+  # remove NA values from plot
+  results <- filter(results, !is.na(padj))
   
   # make plot
   p <- 
@@ -91,9 +100,8 @@ volcano_plot <- function(results, label = NULL) {
     theme(panel.grid = element_blank()) +
     labs(x = expression("Fold change (log"[2]*")"), 
          y = expression(italic("P")*" value (-log"[10]*")")) +
-    scale_x_continuous(limits = c(-max_fc, max_fc),
-                       expand = c(0, 0)) +
-    scale_y_continuous(expand = c(0, 0))
+    scale_x_continuous(expand = c(0, 0), limits = c(-xmax, xmax)) +
+    scale_y_continuous(expand = c(0, 0), limits = c(0, ymax))
   
   # add gene labels
   if (!is.null(label)) {
@@ -390,7 +398,8 @@ correlation_plot <- function(counts, genes = NULL, info = NULL,
 }
 
 # - Expression vs. enrichment plot --------------------------------------------
-ma_plot <- function(results, cpm, label = NULL) {
+ma_plot <- function(results, cpm, label = NULL,
+                    ymax = NULL, ylim = NULL) {
   # combine enrichment and expression data
   cpm <- data.frame("gene_id" = cpm$gene_id, 
                     "expr" = rowMeans(select(cpm, -gene_id))
@@ -398,12 +407,26 @@ ma_plot <- function(results, cpm, label = NULL) {
   df <- left_join(results, cpm, by = "gene_id") %>%
     filter(!is.na(padj))
   
+  # set axis limits
+  if (is.null(ymax)) {
+    if (sum(df$padj < 0.05) > 0) {
+      ymax <- max(abs(filter(df, padj < 0.05)$log2FoldChange))
+    } else {
+      ymax <- max(abs(df$log2FoldChange))
+    }
+  }
+  if (is.null(ylim)) {
+    ylim <- c(1, 6000)
+  }
+  
   # plot
   p <- ggplot(df, aes(x = expr, y = log2FoldChange, color = padj < 0.05)) +
     geom_hline(aes(yintercept = -log2(1.5)), linetype = "dashed") +
     geom_hline(aes(yintercept = log2(1.5)), linetype = "dashed") +
     geom_point(alpha = 0.4, stroke = 0, show.legend = FALSE) +
-    scale_x_continuous(trans = "log2", expand = c(0, 0)) +
+    scale_x_continuous(breaks = c(1, 16, 256, 4096), limits = ylim,
+                       expand = c(0, 0), trans = "log2") +
+    scale_y_continuous(limits = c(-ymax, ymax), expand = c(0, 0)) +
     scale_color_manual(values = c("gray50", "firebrick3")) +
     geom_hline(aes(yintercept = 0)) +
     theme_bw() +
