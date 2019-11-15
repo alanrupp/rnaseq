@@ -31,8 +31,9 @@ intermine <- function(genes) {
 
 # - GO analysis ---------------------------------------------------------------
 run_go <- function(deseq_results, ontology = NULL) {
-  go <- read_csv("~/Programs/rnaseq/data/mgi.csv.gz")
-  terms <- read_tsv("~/Programs/rnaseq/data/go_terms.mgi", col_names = FALSE)
+  go <- read_csv("~/Programs/rnaseq/data/mgi.csv.gz", col_types = "cc")
+  terms <- read_tsv("~/Programs/rnaseq/data/go_terms.mgi", col_names = FALSE,
+                    col_types = "ccc")
   if (!is.null(ontology)) {
     terms <- filter(terms, X1 == ontology)
     go <- filter(go, GO %in% terms$X2)
@@ -44,6 +45,27 @@ run_go <- function(deseq_results, ontology = NULL) {
   # set up population values for hypergeometric test
   sig_genes <- sum(deseq_results$padj < 0.05)
   all_genes <- nrow(deseq_results)
+  
+  # remove GO terms that are underpowered (don't even test)
+  max_go_genes <- seq(max(table(go$GO)))
+  power_test <- phyper(max_go_genes-1, sig_genes, all_genes-sig_genes, 
+                       max_go_genes, lower.tail = FALSE)
+  if (sum(power_test >= 0.05) > 0) {
+    underpowered <- which(power_test >= 0.5)
+    print(paste("Removing", max(underpowered), "GO categories because they are",
+                "underpowered."))
+    underpowered_categories <- go %>% group_by(GO) %>% count() %>%
+      filter(n <= max(underpowered)) %>% .$GO
+    go <- filter(go, !GO %in% underpowered_categories)
+    deseq_results <- filter(deseq_results, gene_name %in% unique(go$gene))
+    go <- filter(go, gene %in% deseq_results$gene_name)
+  } else {
+    print("Running on all GO terms because there is enough power to detect.")
+  }
+  
+  # run hypergeometric test on all GO terms and adjust with FDR
+  go_terms <- unique(go$GO)
+  print(paste("Running GO for", length(go_terms), "terms"))
   go_test <- function(go_term) {
     all_go_genes <- sum(go$GO == go_term)
     sig_go_genes <- sum(
@@ -53,9 +75,6 @@ run_go <- function(deseq_results, ontology = NULL) {
     phyper(sig_go_genes-1, sig_genes, all_genes-sig_genes, all_go_genes,
            lower.tail = FALSE)
   }
-  
-  # run hypergeometric test on all GO terms and adjust with Bonferroni
-  go_terms <- unique(go$GO)
   results <- map_dbl(go_terms, go_test)
   results <- p.adjust(results, method = "BH")
   
@@ -63,5 +82,6 @@ run_go <- function(deseq_results, ontology = NULL) {
   results <- data.frame("GO" = go_terms, "P" = results)
   results <- left_join(results, terms, by = c("GO" = "X2"))
   results <- rename(results, "Ontology" = X1, "Name" = X3)
+  results <- arrange(results, P)
   return(select(results, GO, Name, Ontology, P))
 }
