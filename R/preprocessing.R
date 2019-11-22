@@ -2,11 +2,23 @@ library(tidyverse)
 
 # - Read counts ---------------------------------------------------------------
 read_counts <- function(files, column = "X2") {
-  samples <- str_extract(files, "Sample_[0-9]+")
-  map(files, ~ read_tsv(.x, skip = 4, col_names = FALSE)) %>%
-    bind_cols() %>%
-    select(X1, starts_with(column)) %>%
-    set_names("gene_id", samples)
+  if (str_detect(files, "Sample")) {
+    samples <- str_extract(files, "Sample_[0-9]+")
+  } else {
+    samples <- paste0("Sample_", str_extract(files, "[:alnum:]+(?=Reads)"))
+  }
+  
+  # read data
+  if (length(files) > 1) {
+    map(files, ~ read_tsv(.x, skip = 4, col_names = FALSE)) %>%
+      bind_cols() %>%
+      select(X1, starts_with(column)) %>%
+      set_names("gene_id", samples)
+  } else {
+    read_tsv(files, skip = 4, col_names = FALSE) %>%
+      select(X1, !!sym(column)) %>%
+      set_names("gene_id", samples)
+  }
 }
 
 # - Make counts to CPM --------------------------------------------------------
@@ -50,7 +62,6 @@ correlation <- function(counts, genes = NULL) {
   if (!is.null(genes)) {
     counts <- filter(counts, gene_id %in% genes) 
   }
-  counts <- make_cpm(counts, log2 = TRUE)
   corr <- cor(select(counts, -gene_id))
   corr <- as.data.frame(corr) %>%
     rownames_to_column("Sample_A") %>%
