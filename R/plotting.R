@@ -132,18 +132,19 @@ make_spectral <- function(n = 100) {
 } 
 
 # - Heatmap plot --------------------------------------------------------------
-heatmap_plot <- function(counts, genes = NULL, 
+heatmap_plot <- function(counts, gene_ids = NULL, 
                          info = NULL, annotation = NULL,
                          max_cpm = 10, make_cpm = TRUE,
                          label_genes = FALSE,
                          cluster_genes = TRUE, cluster_samples = TRUE,
                          draw_tree = FALSE,
-                         color_palette = NULL) {
+                         color_palette = make_spectral(), 
+                         tree_scaling = 1) {
   if (make_cpm) { counts <- make_cpm(counts, log2 = TRUE) }
   if (!is.null(genes)) { 
-    counts <- filter(counts, gene_id %in% genes) 
+    counts <- filter(counts, gene_id %in% gene_ids) 
   } else {
-    genes <- unique(counts$gene_id)
+    gene_ids <- unique(counts$gene_id)
   }
   
   # make tidy
@@ -163,8 +164,6 @@ heatmap_plot <- function(counts, genes = NULL,
   } else {
     sample_levels <- colnames(counts)[colnames(counts) != "gene_id"]
   }
-  
-  # make factor
   df <- df %>%
     mutate(gene_id = factor(gene_id, levels = gene_levels),
            Sample_ID = factor(Sample_ID, levels = sample_levels))
@@ -175,19 +174,20 @@ heatmap_plot <- function(counts, genes = NULL,
   # plot
   plt <- ggplot(df, aes(x = Sample_ID, y = as.numeric(gene_id), fill = counts)) +
     geom_tile() +
-    theme_minimal() +
+    xlab(NULL) + ylab(NULL) +
+    scale_y_continuous(expand = c(0, 0)) +
+    theme_void() +
     theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5,
                                      color = "black"),
-          axis.text.y = element_blank()) +
-    ylab(NULL) +
-    xlab(NULL) +
-    scale_y_continuous(expand = c(0, 0))
+          axis.text.y = element_blank())
+  
   if (label_genes) {
     plt <- plt + theme(axis.text.y = element_text(color = "black"))
   }
   if (!is.null(color_palette)) {
-    plt <- plt + scale_fill_gradient2(color_palette) +
-      theme(legend.title = element_blank())
+    plt <- plt + 
+      scale_fill_gradientn(colors = color_palette,
+                           name = expression(underline("CPM\n(log"[2]*")")))
   }
   
   # add annotation
@@ -233,21 +233,28 @@ heatmap_plot <- function(counts, genes = NULL,
     }
   } else if (!is.null(annotation) & is.null(info)) {
     message("Cannot add annotation to a plot without an info object")
+  } else {
+    block_size <- 0
   }
   
   # return plot
   if (draw_tree) {
-    n_samples <- length(sample_clust$labels)
-    tree_plot <- ggdendrogram(dendro_data(sample_clust)) + 
-      theme_void() +
-      theme(plot.margin = unit(c(0, 1.1-(0.008*n_samples), 
-                                 0, 0.2-(0.008*n_samples)), "in"))
-    return(cowplot::plot_grid(plotlist = list(tree_plot, plt), ncol = 1,
-                              rel_heights = c(0.2, 0.8))
-    )
-  } else {
-    return(plt)
+    # draw tree
+    sticks <- dendro_data(sample_clust)$segments
+    scaling <- length(gene_ids) * 0.1
+    for (i in 1:nrow(sticks)) {
+      plt <- plt +
+        annotate("segment",
+                 x = sticks[i, "x"], xend = sticks[i, "xend"],
+                 y = (sticks[i, "y"] * tree_scaling) + 
+                   (block_size * length(annotation)) +
+                   length(gene_ids) + 0.5,
+                 yend = (sticks[i, "yend"] * tree_scaling) +
+                   (block_size * length(annotation)) + 
+                   length(gene_ids) + 0.5)
+    }
   }
+  return(plt)
 }
 
 
