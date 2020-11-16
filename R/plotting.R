@@ -14,49 +14,36 @@ read_depth <- function(counts) {
 counts_plot <- function(counts, gene_names, info, samples = NULL,
                         group = NULL, color = NULL, shape = NULL, dodge = NULL,
                         pair = FALSE, cpm = TRUE, n_col = NULL) {
-  if (!is.null(samples)) {
-    counts <- select(counts, gene_id, samples)
-  }
-  
+  # subset samples
+  if (!is.null(samples)) { counts <- select(counts, gene_id, samples) }
   # make CPM
-  if (cpm) {
-    df <- make_cpm(counts)
-  } else {
-    df <- counts
-  }
-  
+  if (cpm) { df <- make_cpm(counts) } else { df <- counts }
   # add metadata
   df <- left_join(df, genes, by = "gene_id") %>%
     filter(gene_name %in% gene_names) %>%
-    select(gene_name, starts_with("Sample")) %>%
+    select(-gene_id, -gene_biotype) %>%
     gather(-gene_name, key = "Sample_ID", value = "expr") %>%
     left_join(., info, by = "Sample_ID")
   
   # plot
   p <- ggplot(df, aes(y = expr)) +
     scale_y_continuous(trans = "log2") +
-    theme_minimal() +
+    theme_classic() +
     ylab("Expression (CPM)") +
     xlab(NULL)
   
   # custom color aesthetic
   if (!is.null(dodge)) {
-    p <- p + geom_boxplot(aes(x = !!sym(dodge))) +
+    p <- p + 
+      geom_boxplot(aes(x = !!sym(dodge))) +
       geom_jitter(aes(x = !!sym(dodge)), height = 0, width = 0.2)
   } else {
-    p <- p + geom_boxplot(aes(x = '')) +
+    p <- p + 
+      geom_boxplot(aes(x = '')) +
       geom_jitter(aes(x = ''), height = 0, width = 0.2)
   }
   if (!is.null(color)) {
-    p <- p + 
-      geom_line(aes(color = !!color)) + 
-      geom_point(aes(color = !!color))
-  }
-  # custom shape aesthetic
-  if (!is.null(shape)) {
-    p <- p + 
-      geom_line(aes(shape = shape)) + 
-      geom_point(aes(shape = shape))
+    p <- p + geom_jitter(aes(color = !!sym(color)))
   }
   # facet for multiple genes
   if (length(gene_names) > 1) {
@@ -141,7 +128,7 @@ heatmap_plot <- function(counts, gene_ids = NULL,
                          color_palette = make_spectral(), 
                          tree_scaling = 1) {
   if (make_cpm) { counts <- make_cpm(counts, log2 = TRUE) }
-  if (!is.null(genes)) { 
+  if (!is.null(gene_ids)) { 
     counts <- filter(counts, gene_id %in% gene_ids) 
   } else {
     gene_ids <- unique(counts$gene_id)
@@ -156,7 +143,7 @@ heatmap_plot <- function(counts, gene_ids = NULL,
       column_to_rownames("gene_id") %>% dist() %>% hclust()
     gene_levels <- gene_clust$labels[gene_clust$order]
   } else {
-    gene_levels <- genes
+    gene_levels <- gene_ids
   }
   if (cluster_samples) {
     sample_clust <- hclust(dist(t(counts[, 2:ncol(counts)])))
@@ -406,13 +393,20 @@ correlation_plot <- function(counts, genes = NULL, info = NULL,
 
 # - Expression vs. enrichment plot --------------------------------------------
 ma_plot <- function(results, cpm, label = NULL,
-                    ymax = NULL, ylim = NULL) {
+                    ymax = NULL, ylim = NULL,
+                    cpm_subset = NULL,
+                    plot_genes = NULL) {
+  if (!is.null(cpm_subset)) {
+    cpm <- cpm[, c("gene_id", cpm_subset)]
+  }
+  if (!is.null(plot_genes)) {
+    cpm <- filter(cpm, gene_id %in% filter(genes, gene_name %in% plot_genes)$gene_id)
+  }
   # combine enrichment and expression data
   cpm <- data.frame("gene_id" = cpm$gene_id, 
                     "expr" = rowMeans(select(cpm, -gene_id))
                     )
-  df <- left_join(results, cpm, by = "gene_id") %>%
-    filter(!is.na(padj))
+  df <- left_join(results, cpm, by = "gene_id") %>% filter(!is.na(padj))
   
   # set axis limits
   if (is.null(ymax)) {

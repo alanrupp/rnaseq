@@ -12,11 +12,11 @@ read_counts <- function(files, column = "X2") {
   if (length(files) > 1) {
     map(files, ~ read_tsv(.x, skip = 4, col_names = FALSE)) %>%
       bind_cols() %>%
-      select(X1, starts_with(column)) %>%
+      select(`X1...1`, starts_with(column)) %>%
       set_names("gene_id", samples)
   } else {
     read_tsv(files, skip = 4, col_names = FALSE) %>%
-      select(X1, !!sym(column)) %>%
+      select(`X1`, !!sym(column)) %>%
       set_names("gene_id", samples)
   }
 }

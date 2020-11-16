@@ -4,7 +4,7 @@ library(reticulate)
 cpm_means <- function(cpm, info, group) {
   unique_groups <- unique(info[[group]])
   mean_vals <- function(x) {
-    df <- cpm[, filter(info, !!sym(group) == x)$Sample_ID]
+    df <- cpm[, dplyr::filter(info, !!sym(group) == x)$Sample_ID]
     if (is.null(ncol(df))) {
       warning(paste(x, "has only 1 sample. Cannot calculate mean."),
               call. = FALSE)
@@ -16,15 +16,14 @@ cpm_means <- function(cpm, info, group) {
   df <- map(unique_groups, mean_vals) %>% bind_cols()
   df <- set_names(df, unique_groups)
   df$gene_id <- cpm$gene_id
-  df <- select(df, gene_id, unique_groups)
+  df <- dplyr::select(df, gene_id, unique_groups)
   return(df)
 }
 
 # - Intermine -----------------------------------------------------------------
 intermine <- function(genes) {
   source_python("~/Programs/rnaseq/python/mousemine.py")
-  result <- clean_result(query_intermine(genes))
-  result <- as.data.frame(result)
+  result <- clean_result(genes)
   result <- result[!duplicated(result), ]
   return(result)
 }
@@ -75,13 +74,13 @@ run_go <- function(deseq_results, ontology = NULL) {
     phyper(sig_go_genes-1, sig_genes, all_genes-sig_genes, all_go_genes,
            lower.tail = FALSE)
   }
-  results <- map_dbl(go_terms, go_test)
+  results <- pbapply::pbsapply(go_terms, go_test)
   results <- p.adjust(results, method = "BH")
   
   # export as data.frame
   results <- data.frame("GO" = go_terms, "P" = results)
   results <- left_join(results, terms, by = c("GO" = "X2"))
-  results <- rename(results, "Ontology" = X1, "Name" = X3)
+  results <- dplyr::rename(results, "Ontology" = X1, "Name" = X3)
   results <- arrange(results, P)
-  return(select(results, GO, Name, Ontology, P))
+  return(dplyr::select(results, GO, Name, Ontology, P))
 }
