@@ -12,11 +12,11 @@ read_counts <- function(files, column = "X2") {
   if (length(files) > 1) {
     map(files, ~ read_tsv(.x, skip = 4, col_names = FALSE)) %>%
       bind_cols() %>%
-      select(X1, starts_with(column)) %>%
+      select(`X1...1`, starts_with(column)) %>%
       set_names("gene_id", samples)
   } else {
     read_tsv(files, skip = 4, col_names = FALSE) %>%
-      select(X1, !!sym(column)) %>%
+      select(`X1`, !!sym(column)) %>%
       set_names("gene_id", samples)
   }
 }
@@ -32,11 +32,12 @@ make_cpm <- function(counts, log2 = FALSE) {
 }
 
 # - Find genes expressed above given threshold --------------------------------
-expressed_genes <- function(counts, cpm_threshold = 1, min_samples = 3) {
+expressed_genes <- function(counts, cpm_threshold = 1, min_samples = 3,
+			    gene_col = "gene_id") {
   counts <- make_cpm(counts)
   above_threshold <- mutate_if(counts, is.numeric, ~ .x > cpm_threshold)
   above_threshold <- rowSums(select_if(counts, is.numeric)) >= min_samples
-  return(counts$gene_id[above_threshold])
+  return(counts[above_threshold, ] %>% pull(gene_col))
 }
 
 # - Choose PCs from PCA by bootstrapping --------------------------------------
