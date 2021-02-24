@@ -41,7 +41,8 @@ expressed_genes <- function(counts, cpm_threshold = 1, min_samples = 3,
 }
 
 # - Choose PCs from PCA by bootstrapping --------------------------------------
-choose_pcs <- function(pca, matrix, reps = 100, sig_level = 0.05) {
+choose_pcs <- function(pca, matrix, reps = 100, sig_level = 0.05,
+		       progress_bar = FALSE) {
   mtrx <- as.matrix(matrix)
   randomize <- function(mtrx) {
     result <- sapply(seq(nrow(mtrx)), function(x) sample(mtrx[x, ]))
@@ -51,6 +52,7 @@ choose_pcs <- function(pca, matrix, reps = 100, sig_level = 0.05) {
     pca <- prcomp(randomize(matrix), scale. = TRUE)
     return(pca$sdev^2)
   }
+  if (progress_bar) replicate <- pbapply::pbreplicate
   eigenvalues <- replicate(reps, find_eigenvalues(mtrx))
   # find the frequency that real eigenvalue is above bootstrap eigenvalue
   prob <- 1 - rowSums(pca$sdev^2 > eigenvalues) / reps
