@@ -246,45 +246,24 @@ heatmap_plot <- function(counts, gene_ids = NULL,
 
 
 # - TSNE ----------------------------------------------------------------------
-tsne_plot <- function(counts, info = NULL, color = NULL, shape = NULL,
-                      text = NULL) {
-  df <- counts %>%
-    filter(gene_id %in% expressed_genes(counts)) %>%
-    make_cpm(., log2 = TRUE)
-  
-  # make df with rownames
-  df <- df %>% as.data.frame() %>% column_to_rownames("gene_id")
-  
-  # run PCA
-  pca <- prcomp(t(df), scale. = TRUE)
-  pcs <- choose_pcs(pca, df)
-  
+tsne_plot <- function(pca, pcs, info = NULL, sample_name = "Sample_ID", 
+		      color = NULL, shape = NULL, text = NULL) {
   # run TSNE from PCA
   set.seed(32)
   tsne <- Rtsne::Rtsne(pca$x[, pcs], perplexity = (nrow(pca$x) - 1) / 3)
-  coord <- 
-    as.data.frame(tsne$Y) %>%
-    set_names("TSNE1", "TSNE2") %>%
-    mutate("Sample_ID" = rownames(pca$x))
+  coord <- tsne$Y %>%
+    as.data.frame() %>%
+    mutate(Sample_ID = rownames(pca$x)) %>%
+    set_names("TSNE1", "TSNE2", sample_name)
   
-  if (!is.null(info)) {
-    coord <- left_join(coord, info, by = "Sample_ID")
-    color_var <- sym(color)
-    shape_var <- sym(shape)
-    text_var <- sym(text)
-  }
+  if (!is.null(info)) coord <- left_join(coord, info, by = sample_name)
   
   # plot
   plt <- ggplot(coord, aes(x = TSNE1, y = TSNE2)) +
     theme_bw() +
     theme(panel.grid = element_blank())
-  if (!is.null(info)) {
-    plt <- plt + 
-      geom_point(aes(color = !!color_var, shape = !!shape_var)) +
-      geom_text_repel(aes(label = Sample_ID, color = !!text_var), 
-                      show.legend = FALSE) +
-      scale_color_manual(values = wes_palette("Cavalcanti1"))
-  }
+  plt <- plt + geom_point()
+  if (!is.null(color)) plt <- plt %+% geom_point(aes(color = !!sym(color)))
   return(plt)
 }
 
