@@ -5,6 +5,8 @@ Get ontology information from Intermine API for a list of genes. Genes should be
 in a list format.
 '''
 
+import pandas as pd
+
 def query_intermine(genes):
     genes = ', '.join(genes)
     from intermine.webservice import Service
@@ -13,10 +15,10 @@ def query_intermine(genes):
     query.add_constraint("ontologyTerm", "MPTerm")
     query.add_constraint("subject", "SequenceFeature")
     query.add_view(
-    "subject.primaryIdentifier", "subject.symbol",
-    "subject.sequenceOntologyTerm.name", "ontologyTerm.identifier",
-    "ontologyTerm.name", "evidence.publications.pubMedId",
-    "evidence.comments.type", "evidence.comments.description"
+      "subject.primaryIdentifier", "subject.symbol",
+      "subject.sequenceOntologyTerm.name", "ontologyTerm.identifier",
+      "ontologyTerm.name", "evidence.publications.pubMedId",
+      "evidence.comments.type", "evidence.comments.description"
     )
     query.add_sort_order("OntologyAnnotation.ontologyTerm.name", "ASC")
     query.add_constraint("subject.organism.taxonId", "=", "10090", code = "A")
@@ -30,11 +32,13 @@ def to_string(list_object):
     return list_object
 
 # grab relevant fields
-def clean_result(query):
+def clean_result(genes):
+    query = query_intermine(genes)
     result = {'id': [], 'ontology': []}
     for row in query.rows():
         result['id'].append(row['subject.symbol'])
         result['ontology'].append(row["ontologyTerm.name"])
     for key in result.keys():
         result[key] = to_string(result[key])
+    result = pd.DataFrame(result)
     return result
